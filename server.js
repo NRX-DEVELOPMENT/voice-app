@@ -54,7 +54,8 @@ io.on('connection', socket => {
     }
 });
 
-const PORT = 3000;
-http.listen(PORT, () => {
-    console.log(`Voice-Chat Server running smoothly on http://localhost:${PORT}`);
+const PORT = process.env.PORT || 3000;
+
+http.listen(PORT, "0.0.0.0", () => {
+    console.log(`Voice-Chat Server running on port ${PORT}`);
 });
