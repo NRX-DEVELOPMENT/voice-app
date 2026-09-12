@@ -1,0 +1,15 @@
+{
+  "name": "Voice-Chat Hub",
+  "short_name": "Voice-Chat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a0c",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "background.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

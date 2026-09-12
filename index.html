@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice-Chat - Ultimate Edition</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: rgba(18, 19, 22, 0.75);
+            --bg-secondary: rgba(26, 28, 33, 0.88);
+            --bg-tertiary: rgba(14, 15, 18, 0.9);
+            --bg-hover: rgba(53, 55, 64, 0.6);
+            --text-normal: #e3e5e8;
+            --text-muted: #949ba4;
+            --brand: #6366f1;
+            --brand-hover: #4f46e5;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #22c55e;
+        }
+
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'GG Sans', 'Segoe UI', Tahoma, sans-serif; 
+            margin: 0; 
+            background: url('background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            image-rendering: -webkit-optimize-contrast;
+            color: var(--text-normal); 
+            height: 100vh; 
+            display: flex; 
+            overflow: hidden; 
+        }
+
+        /* High-Definition Cosmic Background Layer */
+        body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(10, 12, 24, 0.35) 0%, rgba(5, 6, 10, 0.7) 100%);
+            backdrop-filter: blur(2px);
+            z-index: -1;
+        }
+
+        /* Login Overlay */
+        #login-overlay { position: fixed; inset: 0; background: rgba(5, 5, 8, 0.88); backdrop-filter: blur(16px); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .login-box { background: rgba(22, 24, 30, 0.95); border: 1px solid rgba(255,255,255,0.08); padding: 40px; border-radius: 16px; text-align: center; box-shadow: 0 24px 48px rgba(0,0,0,0.8); width: 400px; }
+        .login-box h2 { color: #fff; margin-bottom: 8px; font-weight: 700; letter-spacing: 0.5px; }
+        .login-box p { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+        
+        .avatar-upload-box { position: relative; width: 80px; height: 80px; margin: 0 auto 20px; border-radius: 50%; border: 2px dashed var(--brand); display: flex; justify-content: center; align-items: center; cursor: pointer; overflow: hidden; background: var(--bg-tertiary); transition: 0.2s; }
+        .avatar-upload-box:hover { border-color: #fff; background: rgba(99, 102, 241, 0.1); }
+        .avatar-upload-box img { width: 100%; height: 100%; object-fit: cover; position: absolute; display: none; }
+        .avatar-upload-box span { font-size: 11px; color: var(--text-muted); text-align: center; padding: 4px; }
+
+        .login-box input[type="text"] { width: 100%; padding: 12px 16px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; background: var(--bg-tertiary); color: white; outline: none; font-size: 15px; }
+        .login-box input[type="text"]:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+        .login-box button { width: 100%; padding: 12px; background: var(--brand); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.2s; }
+        .login-box button:hover { background: var(--brand-hover); box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+        #login-error { color: var(--danger); font-size: 13px; margin-top: 10px; display: none; }
+
+        /* App Shell */
+        #app-container { display: none; width: 100%; height: 100%; }
+
+        /* Channels Sidebar */
+        .sidebar { width: 260px; background-color: var(--bg-secondary); backdrop-filter: blur(16px); display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.06); }
+        .sidebar-header { padding: 20px; font-weight: 700; font-size: 16px; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.5px; }
+        
+        .channels-container { flex: 1; padding: 16px 10px; overflow-y: auto; }
+        .channels-title-row { display: flex; justify-content: space-between; align-items: center; padding: 0 8px; margin-bottom: 8px; }
+        .channels-heading { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .add-chan-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; font-weight: bold; padding: 0 4px; display: none; transition: color 0.15s; }
+        .add-chan-btn:hover { color: #fff; }
+
+        .channel { padding: 9px 12px; margin: 3px 0; border-radius: 6px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; font-weight: 500; font-size: 14px; transition: all 0.15s; }
+        .channel:hover { background-color: var(--bg-hover); color: var(--text-normal); }
+        .channel.active { background-color: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
+        .del-chan { background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px; display: none; padding: 2px 6px; border-radius: 4px; }
+        .del-chan:hover { background: rgba(239, 68, 68, 0.2); }
+        .channel:hover .del-chan { display: block; }
+
+        /* Profile Footer */
+        .user-profile-footer { background-color: rgba(14, 15, 18, 0.85); padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid rgba(255,255,255,0.06); }
+        .user-info-wrapper { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+        .avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), #a855f7); display: flex; justify-content: center; align-items: center; font-weight: 700; color: white; flex-shrink: 0; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4); overflow: hidden; }
+        .avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .user-names .name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+        .user-names .tag { font-size: 10px; color: var(--text-muted); }
+
+        .profile-actions { display: flex; gap: 2px; }
+        .action-icon-btn { background: transparent; border: none; color: var(--text-muted); width: 30px; height: 30px; border-radius: 6px; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 14px; transition: 0.15s; position: relative; }
+        .action-icon-btn:hover { background-color: var(--bg-hover); color: #fff; }
+        .action-icon-btn.active { color: var(--danger); }
+        .action-icon-btn.active::after { content: ''; position: absolute; width: 2px; height: 18px; background-color: var(--danger); transform: rotate(45deg); }
+
+        /* Main Workspace */
+        .main-content { flex: 1; display: flex; flex-direction: column; background: transparent; position: relative; }
+        .top-bar { height: 54px; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; padding: 0 20px; font-weight: 600; font-size: 15px; color: #fff; background: rgba(18, 19, 22, 0.55); backdrop-filter: blur(12px); }
+        
+        #media-grid { flex: 1; padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; align-content: center; justify-items: center; overflow-y: auto; }
+        
+        /* Video Card Wrapper for Per-Tile Controls */
+        .video-card { background: rgba(15, 17, 22, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,0.7); width: 100%; max-width: 600px; display: flex; flex-direction: column; }
+        .video-card-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(22, 24, 30, 0.9); border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; font-weight: 600; color: var(--text-muted); }
+        .video-card-actions { display: flex; gap: 6px; }
+        .tile-btn { background: var(--bg-tertiary); border: 1px solid rgba(255,255,255,0.08); color: var(--text-normal); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: 0.15s; }
+        .tile-btn:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+        .tile-btn.active-off { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+        video { width: 100%; max-height: 50vh; background: #000; object-fit: contain; display: block; }
+        audio { display: none; }
+
+        /* Floating Toolbar */
+        .active-controls { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(22, 24, 30, 0.9); backdrop-filter: blur(16px); padding: 10px 20px; border-radius: 12px; display: none; gap: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.08); z-index: 10; }
+        .ctrl-btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; color: white; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: 0.2s; }
+        .btn-screen { background-color: var(--brand); }
+        .btn-screen:hover { background-color: var(--brand-hover); box-shadow: 0 0 12px rgba(99, 102, 241, 0.4); }
+        .btn-disconnect { background-color: var(--danger); }
+        .btn-disconnect:hover { background-color: var(--danger-hover); box-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
+
+        /* Right User Sidebar */
+        .user-list-sidebar { width: 240px; background-color: var(--bg-secondary); backdrop-filter: blur(16px); border-left: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; }
+        .user-list-header { padding: 20px 16px 10px; font-weight: 700; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        #user-list { list-style: none; padding: 0 8px; margin: 0; overflow-y: auto; }
+        .user-item { padding: 8px 10px; display: flex; align-items: center; gap: 10px; border-radius: 6px; margin-bottom: 3px; cursor: pointer; transition: background 0.15s; }
+        .user-item:hover { background-color: var(--bg-hover); }
+        .user-item .u-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), #a855f7); display: flex; justify-content: center; align-items: center; font-weight: bold; color: white; flex-shrink: 0; font-size: 13px; overflow: hidden; }
+        .user-item .u-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .user-item .u-name { font-weight: 500; font-size: 14px; color: var(--text-normal); }
+
+        /* Custom Context Menu */
+        #custom-context-menu { position: fixed; display: none; background: rgba(22, 24, 30, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px; z-index: 3000; box-shadow: 0 12px 32px rgba(0,0,0,0.7); min-width: 140px; }
+        .ctx-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-normal); transition: 0.15s; display: flex; align-items: center; gap: 8px; }
+        .ctx-item:hover { background-color: var(--brand); color: #fff; }
+
+        /* Modals */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 3000; }
+        .modal-box { background: rgba(22, 24, 30, 0.95); border: 1px solid rgba(255,255,255,0.08); padding: 28px; border-radius: 12px; width: 360px; text-align: center; box-shadow: 0 24px 48px rgba(0,0,0,0.8); }
+        .modal-box h3 { margin-top: 0; color: #fff; }
+        .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btns button { flex: 1; padding: 10px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-yes { background: var(--success); color: white; }
+        .btn-yes:hover { background: #16a34a; }
+        .btn-no { background: var(--bg-tertiary); color: var(--text-normal); }
+        .btn-no:hover { background: rgba(255,255,255,0.05); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: var(--danger-hover); }
+    </style>
+</head>
+<body>
+
+    <!-- Login Dialog -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Voice-Chat Access</h2>
+            <p>Setup your profile identification</p>
+            
+            <div class="avatar-upload-box" onclick="document.getElementById('file-input').click()">
+                <span id="upload-placeholder">Upload Avatar</span>
+                <img id="preview-avatar" src="" alt="Avatar">
+            </div>
+            <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+
+            <input type="text" id="username-input" placeholder="Enter username..." autocomplete="off">
+            <button onclick="attemptLogin()">Connect & Remember</button>
+            <div id="login-error"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-box">
+            <h3>Account Settings</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Manage your session and identity credentials</p>
+            <div class="avatar-upload-box" style="margin: 20px auto;" onclick="document.getElementById('settings-file-input').click()">
+                <img id="settings-preview-avatar" src="" alt="Avatar" style="display: block;">
+            </div>
+            <input type="file" id="settings-file-input" accept="image/*" style="display: none;" onchange="handleSettingsFileSelect(event)">
+            <p id="settings-username-display" style="font-weight: 600; font-size: 15px; color: #fff; margin-bottom: 20px;"></p>
+            
+            <div class="modal-btns">
+                <button class="btn-no" onclick="closeSettings()">Close</button>
+                <button class="btn-danger" onclick="logoutSession()">Log Out</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right-Click Context Menu for Users -->
+    <div id="custom-context-menu">
+        <div class="ctx-item" id="ctx-mute-btn" onclick="toggleUserMuteLocal()">🔇 Mute User</div>
+    </div>
+
+    <!-- Screen Share Audio Selection Dialog -->
+    <div class="modal-overlay" id="audio-prompt-modal">
+        <div class="modal-box">
+            <h3>Share Screen Audio?</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Would you like to broadcast system audio along with your ultra-smooth high-fps feed?</p>
+            <div class="modal-btns">
+                <button class="btn-no" onclick="executeScreenShare(false)">No Audio</button>
+                <button class="btn-yes" onclick="executeScreenShare(true)">With Audio</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Client Shell -->
+    <div id="app-container">
+        
+        <!-- Channels Navigation Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span>Voice-Chat</span>
+            </div>
+            
+            <div class="channels-container">
+                <div class="channels-title-row">
+                    <span class="channels-heading">Voice Channels</span>
+                    <button class="add-chan-btn" id="admin-add-btn" onclick="promptCreateChannel()" title="Create Channel">+</button>
+                </div>
+                <div id="channels-list-el"></div>
+            </div>
+
+            <!-- Profile Widget + Mute / Deafen / Settings Toggles -->
+            <div class="user-profile-footer">
+                <div class="user-info-wrapper">
+                    <div class="avatar" id="footer-avatar">U</div>
+                    <div class="user-names">
+                        <div class="name" id="footer-username">User</div>
+                        <div class="tag" id="footer-tag">Online</div>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <button class="action-icon-btn" id="btn-mute" onclick="toggleMute()" title="Mute/Unmute">🎤</button>
+                    <button class="action-icon-btn" id="btn-deafen" onclick="toggleDeafen()" title="Deafen/Undeafen">🎧</button>
+                    <button class="action-icon-btn" onclick="openSettings()" title="Settings">⚙️</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Workspace -->
+        <div class="main-content">
+            <div class="top-bar" id="room-title">💬 Select a Voice Channel</div>
+            <div id="media-grid"></div>
+            
+            <div class="active-controls" id="active-controls">
+                <button class="ctrl-btn btn-screen" onclick="openScreenModal()">💻 Share Screen (120 FPS)</button>
+                <button class="ctrl-btn btn-disconnect" onclick="leaveRoom()">📞 Disconnect</button>
+            </div>
+        </div>
+
+        <!-- Participants Sidebar -->
+        <div class="user-list-sidebar">
+            <div class="user-list-header">Participants</div>
+            <ul id="user-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('/');
+        let username = '';
+        let userAvatar = '';
+        let currentRoom = '';
+        let myPeer = null;
+        let myAudioStream = null;
+        let screenStream = null;
+        let peers = {};
+        
+        let isMuted = false;
+        let isDeafened = false;
+
+        const locallyMutedPeers = new Set();
+        let targetPeerForContext = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('nexus_username');
+            const savedAvatar = localStorage.getItem('nexus_avatar');
+            if (savedUser) {
+                username = savedUser;
+                userAvatar = savedAvatar || '';
+                initAppSession();
+            }
+        });
+
+        document.addEventListener('click', () => {
+            document.getElementById('custom-context-menu').style.display = 'none';
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    userAvatar = e.target.result;
+                    const preview = document.getElementById('preview-avatar');
+                    preview.src = userAvatar;
+                    preview.style.display = 'block';
+                    document.getElementById('upload-placeholder').style.display = 'none';
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleSettingsFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    userAvatar = e.target.result;
+                    localStorage.setItem('nexus_avatar', userAvatar);
+                    document.getElementById('settings-preview-avatar').src = userAvatar;
+                    updateFooterIdentity();
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function attemptLogin() {
+            const val = document.getElementById('username-input').value.trim();
+            const errDiv = document.getElementById('login-error');
+            
+            if (!val) {
+                errDiv.innerText = "Username cannot be empty.";
+                errDiv.style.display = 'block';
+                return;
+            }
+
+            username = val;
+            localStorage.setItem('nexus_username', username);
+            localStorage.setItem('nexus_avatar', userAvatar);
+
+            initAppSession();
+        }
+
+        function initAppSession() {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+
+            updateFooterIdentity();
+
+            if (username === 'Younis') {
+                document.getElementById('admin-add-btn').style.display = 'block';
+            }
+        }
+
+        function updateFooterIdentity() {
+            document.getElementById('footer-username').innerText = username;
+            document.getElementById('footer-tag').innerText = username === 'Younis' ? '👑 Admin' : 'Member';
+            
+            const avatarEl = document.getElementById('footer-avatar');
+            if (userAvatar) {
+                avatarEl.innerHTML = `<img src="${userAvatar}" alt="Avatar">`;
+            } else {
+                avatarEl.innerText = username.charAt(0).toUpperCase();
+            }
+        }
+
+        function openSettings() {
+            document.getElementById('settings-username-display').innerText = `Logged in as: ${username}`;
+            const settingsPreview = document.getElementById('settings-preview-avatar');
+            if (userAvatar) {
+                settingsPreview.src = userAvatar;
+            } else {
+                settingsPreview.src = '';
+            }
+            document.getElementById('settings-modal').style.display = 'flex';
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').style.display = 'none';
+        }
+
+        function logoutSession() {
+            localStorage.removeItem('nexus_username');
+            localStorage.removeItem('nexus_avatar');
+            location.reload();
+        }
+
+        socket.on('channel-list', channels => {
+            const listEl = document.getElementById('channels-list-el');
+            listEl.innerHTML = '';
+            
+            Object.keys(channels).forEach(id => {
+                const chan = channels[id];
+                const div = document.createElement('div');
+                div.className = `channel ${currentRoom === id ? 'active' : ''}`;
+                div.onclick = () => joinRoom(id);
+                
+                let html = `<span>${chan.name}</span>`;
+                if (chan.custom && username === 'Younis') {
+                    html += `<button class="del-chan" onclick="event.stopPropagation(); deleteChannel('${id}')">✕</button>`;
+                }
+                div.innerHTML = html;
+                listEl.appendChild(div);
+            });
+        });
+
+        function promptCreateChannel() {
+            if (username !== 'Younis') return;
+            const name = prompt("Enter new voice channel name:");
+            if (name) socket.emit('create-channel', name, username);
+        }
+
+        function deleteChannel(id) {
+            if (username !== 'Younis') return;
+            if (confirm("Are you sure you want to delete this channel?")) {
+                socket.emit('delete-channel', id, username);
+                if (currentRoom === id) leaveRoom();
+            }
+        }
+
+        async function joinRoom(roomId) {
+            if (currentRoom === roomId) return;
+            
+            if (currentRoom) {
+                if (myPeer) myPeer.destroy();
+                document.getElementById('media-grid').innerHTML = '';
+                peers = {};
+            }
+
+            currentRoom = roomId;
+            document.querySelectorAll('.channel').forEach(c => c.classList.remove('active'));
+            document.getElementById(`channels-list-el`).querySelectorAll('.channel').forEach(el => {
+                if(el.innerText.toLowerCase().includes(roomId)) el.classList.add('active');
+            });
+            
+            document.getElementById('active-controls').style.display = 'flex';
+
+            try {
+                if (!myAudioStream) {
+                    myAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    applyMuteState();
+                }
+
+                myPeer = new Peer();
+                myPeer.on('open', id => {
+                    socket.emit('join-room', currentRoom, id, username, userAvatar);
+                });
+
+                myPeer.on('call', call => {
+                    call.answer(myAudioStream);
+                    const isScreen = call.metadata === 'screen';
+                    const el = document.createElement(isScreen ? 'video' : 'audio');
+                    call.on('stream', stream => addMedia(el, stream, call.peer + (isScreen ? '-screen' : ''), call.peer));
+                });
+
+                socket.on('user-connected', peerId => {
+                    connectToNewUser(peerId, myAudioStream, false);
+                    if (screenStream) connectToNewUser(peerId, screenStream, true);
+                });
+
+                socket.on('user-disconnected', peerId => {
+                    if (peers[peerId]) peers[peerId].close();
+                    if (peers[peerId + '-screen']) peers[peerId + '-screen'].close();
+                    document.getElementById(`tile-${peerId}-screen`)?.remove();
+                    document.getElementById(peerId)?.remove();
+                });
+
+            } catch (err) {
+                alert("Microphone hardware access is required to join voice channels.");
+                console.error(err);
+            }
+        }
+
+        function leaveRoom() {
+            if (myPeer) myPeer.destroy();
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+            myAudioStream = null;
+            currentRoom = '';
+            peers = {};
+
+            document.getElementById('media-grid').innerHTML = '';
+            document.getElementById('active-controls').style.display = 'none';
+            document.getElementById('room-title').innerText = "💬 Select a Voice Channel";
+            document.getElementById('user-list').innerHTML = '';
+
+            document.querySelectorAll('.channel').forEach(c => c.classList.remove('active'));
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            applyMuteState();
+            const btn = document.getElementById('btn-mute');
+            if (isMuted) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+
+        function applyMuteState() {
+            if (myAudioStream) {
+                myAudioStream.getAudioTracks().forEach(track => {
+                    track.enabled = !isMuted && !isDeafened;
+                });
+            }
+        }
+
+        function toggleDeafen() {
+            isDeafened = !isDeafened;
+            const deafBtn = document.getElementById('btn-deafen');
+            const muteBtn = document.getElementById('btn-mute');
+
+            if (isDeafened) {
+                deafBtn.classList.add('active');
+                isMuted = true;
+                muteBtn.classList.add('active');
+            } else {
+                deafBtn.classList.remove('active');
+                isMuted = false;
+                muteBtn.classList.remove('active');
+            }
+
+            applyMuteState();
+
+            document.querySelectorAll('audio, video').forEach(el => {
+                if (el.id !== 'my-screen' && !el.id.includes('-screen-vid')) {
+                    const peerId = el.id;
+                    el.muted = isDeafened || locallyMutedPeers.has(peerId);
+                }
+            });
+        }
+
+        function toggleUserMuteLocal() {
+            if (!targetPeerForContext) return;
+            const audioEl = document.getElementById(targetPeerForContext);
+            
+            if (locallyMutedPeers.has(targetPeerForContext)) {
+                locallyMutedPeers.delete(targetPeerForContext);
+                if (audioEl) audioEl.muted = isDeafened;
+            } else {
+                locallyMutedPeers.add(targetPeerForContext);
+                if (audioEl) audioEl.muted = true;
+            }
+        }
+
+        function openScreenModal() {
+            if (screenStream) return;
+            document.getElementById('audio-prompt-modal').style.display = 'flex';
+        }
+
+        async function executeScreenShare(withAudio) {
+            document.getElementById('audio-prompt-modal').style.display = 'none';
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { 
+                        frameRate: { ideal: 120, max: 120 },
+                        width: { ideal: 1920, max: 3840 },
+                        height: { ideal: 1080, max: 2160 }
+                    }, 
+                    audio: withAudio 
+                });
+
+                const myScreenVid = document.createElement('video');
+                myScreenVid.muted = true; 
+                addMedia(myScreenVid, screenStream, 'my-screen', 'my-screen');
+
+                Object.keys(peers).forEach(key => {
+                    if (!key.includes('-screen')) connectToNewUser(key, screenStream, true);
+                });
+
+                screenStream.getVideoTracks()[0].onended = () => {
+                    document.getElementById('tile-my-screen')?.remove();
+                    screenStream = null;
+                };
+            } catch (err) {
+                console.log("Screen share canceled or denied", err);
+            }
+        }
+
+        function connectToNewUser(peerId, stream, isScreen) {
+            const call = myPeer.call(peerId, stream, { metadata: isScreen ? 'screen' : 'audio' });
+            const el = document.createElement(isScreen ? 'video' : 'audio');
+            
+            call.on('stream', userStream => {
+                addMedia(el, userStream, peerId + (isScreen ? '-screen' : ''), peerId);
+            });
+            call.on('close', () => {
+                document.getElementById(`tile-${peerId}-screen`)?.remove();
+                el.remove();
+            });
+            
+            if (isDeafened && el.tagName === 'AUDIO') el.muted = true;
+
+            peers[peerId + (isScreen ? '-screen' : '')] = call;
+        }
+
+        // Feature: Custom Tile Video Visibility & Screen Audio Muting Controls
+        function addMedia(element, stream, id, peerId) {
+            if (document.getElementById(id) || document.getElementById(`tile-${id}`)) return;
+            element.id = id;
+            element.srcObject = stream;
+            element.addEventListener('loadedmetadata', () => element.play());
+
+            if (element.tagName === 'VIDEO') {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.id = `tile-${id}`;
+
+                const header = document.createElement('div');
+                header.className = 'video-card-header';
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.innerText = id === 'my-screen' ? '💻 Your Screen Share' : `💻 Screen Share (${peerId.slice(0, 5)})`;
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'video-card-actions';
+
+                // Video Visibility Toggle Button
+                const visBtn = document.createElement('button');
+                visBtn.className = 'tile-btn';
+                visBtn.innerText = '👁️ Hide Video';
+                visBtn.onclick = () => {
+                    if (element.style.display === 'none') {
+                        element.style.display = 'block';
+                        visBtn.innerText = '👁️ Hide Video';
+                        visBtn.classList.remove('active-off');
+                    } else {
+                        element.style.display = 'none';
+                        visBtn.innerText = '👁️ Show Video';
+                        visBtn.classList.add('active-off');
+                    }
+                };
+
+                // Screen Audio Mute Toggle Button
+                const audioBtn = document.createElement('button');
+                audioBtn.className = 'tile-btn';
+                audioBtn.innerText = '🔊 Mute Audio';
+                audioBtn.onclick = () => {
+                    element.muted = !element.muted;
+                    if (element.muted) {
+                        audioBtn.innerText = '🔇 Unmute Audio';
+                        audioBtn.classList.add('active-off');
+                    } else {
+                        audioBtn.innerText = '🔊 Mute Audio';
+                        audioBtn.classList.remove('active-off');
+                    }
+                };
+
+                actionsDiv.appendChild(visBtn);
+                actionsDiv.appendChild(audioBtn);
+                header.appendChild(titleSpan);
+                header.appendChild(actionsDiv);
+
+                card.appendChild(header);
+                card.appendChild(element);
+                document.getElementById('media-grid').append(card);
+            } else {
+                if (isDeafened || locallyMutedPeers.has(peerId)) {
+                    element.muted = true;
+                }
+                document.body.append(element);
+            }
+        }
+
+        socket.on('room-users', users => {
+            const list = document.getElementById('user-list');
+            list.innerHTML = '';
+            
+            users.forEach(u => {
+                const li = document.createElement('li');
+                li.className = 'user-item';
+                
+                let avatarHtml = `<div class="u-avatar">${u.username.charAt(0).toUpperCase()}</div>`;
+                if (u.avatar) {
+                    avatarHtml = `<div class="u-avatar"><img src="${u.avatar}" alt="Avatar"></div>`;
+                }
+
+                li.innerHTML = `
+                    ${avatarHtml}
+                    <span class="u-name">${u.username}</span>
+                `;
+
+                li.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if (u.username === username) return; 
+                    
+                    targetPeerForContext = u.peerId;
+                    const menu = document.getElementById('custom-context-menu');
+                    menu.style.display = 'block';
+                    menu.style.left = `${e.clientX}px`;
+                    menu.style.top = `${e.clientY}px`;
+
+                    const muteBtnText = document.getElementById('ctx-mute-btn');
+                    if (locallyMutedPeers.has(u.peerId)) {
+                        muteBtnText.innerText = `🔊 Unmute ${u.username}`;
+                    } else {
+                        muteBtnText.innerText = `🔇 Mute ${u.username}`;
+                    }
+                };
+
+                list.appendChild(li);
+            });
+        });
+    </script>
+</body>
+</html>
